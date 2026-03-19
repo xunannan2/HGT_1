@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -15,16 +14,22 @@ app.use(express.json());
 
 // Check if AI is configured
 app.get("/api/config", (req, res) => {
+  const zhipu = process.env.ZHIPU_API_KEY;
+  const gemini = process.env.GEMINI_API_KEY;
+  
   res.json({ 
-    hasZhipu: !!process.env.ZHIPU_API_KEY,
-    hasGemini: !!process.env.GEMINI_API_KEY
+    hasZhipu: !!zhipu && zhipu.length > 0,
+    hasGemini: !!gemini && gemini.length > 0,
+    // Debug info (safe)
+    env: process.env.NODE_ENV,
+    zhipuLength: zhipu ? zhipu.length : 0
   });
 });
 
 // Zhipu AI Proxy Route
 app.post("/api/chat", async (req, res) => {
   const { prompt } = req.body;
-  const zhipuApiKey = process.env.ZHIPU_API_KEY?.trim();
+  const zhipuApiKey = (process.env.ZHIPU_API_KEY || "").trim();
 
   if (!zhipuApiKey) {
     return res.status(500).json({ error: "ZHIPU_API_KEY is not configured or is empty." });
@@ -34,13 +39,13 @@ app.post("/api/chat", async (req, res) => {
     const maskedKey = zhipuApiKey.length > 8 
       ? `${zhipuApiKey.substring(0, 4)}...${zhipuApiKey.substring(zhipuApiKey.length - 4)}`
       : "***";
-    console.log(`Attempting Zhipu AI request with key: ${maskedKey}`);
+    console.log(`[${new Date().toISOString()}] Attempting Zhipu AI request with key: ${maskedKey}`);
 
     const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": zhipuApiKey, // Removed "Bearer " prefix
+        "Authorization": `Bearer ${zhipuApiKey}`, // Restored Bearer prefix
       },
       body: JSON.stringify({
         model: "GLM-4-Flash",
@@ -105,6 +110,7 @@ app.post("/api/gemini", async (req, res) => {
 
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
+  const { createServer: createViteServer } = await import("vite");
   const vite = await createViteServer({
     server: { middlewareMode: true },
     appType: "spa",
